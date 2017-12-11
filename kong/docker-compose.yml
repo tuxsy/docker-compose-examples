@@ -1,0 +1,113 @@
+version: '2.1'
+services:
+  # ---------------------------------------------------------------------------------
+  # KONG SERVICES
+  # ---------------------------------------------------------------------------------
+  kong-database:
+    image: postgres
+    restart: on-failure
+    container_name: kong-database
+    environment:
+      POSTGRES_DB: kong
+      POSTGRES_PASSWORD: amos.fortran.waxy
+      POSTGRES_USER: gatewayApiKong
+    volumes:
+      - "data-volume:/var/lib/postgresql/data"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  kong-migration:
+    image: kong
+    container_name: kong-migration
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_DATABASE: kong
+      KONG_PG_HOST: db
+      KONG_PG_PASSWORD: amos.fortran.waxy
+      KONG_PG_USER: gatewayApiKong
+    tty: true
+    links:
+      - kong-database:db
+    depends_on:
+      kong-database:
+        condition: service_healthy
+    logging:
+      driver: json-file
+    command: kong migrations up
+    labels:
+      io.rancher.container.start_once: 'true'
+      io.rancher.container.hostname_override: container_name
+      io.rancher.container.pull_image: always
+  kong:
+    image: kong
+    container_name: kong
+    restart: always
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_DATABASE: kong
+      KONG_PG_HOST: db
+      KONG_PG_PASSWORD: amos.fortran.waxy
+      KONG_PERMALINKERROR_DEFAULT_TYPE: application/json
+      KONG_LOG_LEVEL: error
+      KONG_PG_USER: gatewayApiKong
+    tty: true
+    links:
+      - kong-database:db
+    depends_on:
+      kong-database:
+        condition: service_healthy
+      kong-migration:
+        condition: service_started
+    volumes:
+      - "data-volume:/usr/local/kong"
+    logging:
+      driver: json-file
+    ports:
+      - "8000:8000/tcp"
+      - "8443:8443/tcp"
+      - "8001:8001/tcp"
+      - "7946:7946/tcp"
+      - "7946:7946/udp"
+    labels:
+      io.rancher.container.hostname_override: container_name
+      io.rancher.container.pull_image: always
+      gateway: 'true'
+    healthcheck:
+      test: ["CMD-SHELL", "curl -I -s -L http://127.0.0.1:8000 || exit 1"]
+      interval: 5s
+      retries: 10
+  konga:
+    image: pantsel/konga
+    restart: always
+    container_name: konga
+    depends_on:
+      kong:
+        condition: service_healthy
+    tty: true
+    logging:
+      driver: json-file
+    ports:
+      - "1337:1337/tcp"
+    links:
+      - kong:kong
+    environment:
+      - NODE_ENV=production
+    labels:
+      io.rancher.container.hostname_override: container_name
+      io.rancher.container.pull_image: always
+      gateway: 'true'
+    healthcheck:
+      test: ["CMD-SHELL", "curl -I -s -L http://127.0.0.1:1337 || exit 1"]
+      interval: 5s
+      retries: 10
+  # ---------------------------------------------------------------------------------
+  # API SERVICES
+  # ---------------------------------------------------------------------------------
+  
+# ----------------------------------------------------------------------------------
+# GENERAL STUFF
+# ----------------------------------------------------------------------------------
+volumes:
+  data-volume: {}

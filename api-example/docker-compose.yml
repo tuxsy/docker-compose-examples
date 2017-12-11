@@ -1,0 +1,15 @@
+version: "2.1"
+
+services:
+  api-example:
+    container_name: api-example
+    restart: always
+    build: ../api-example
+    restart: always
+    ports:
+      - "3020:80"
+    environment:
+      - NODE_ENV=development
+    depends_on:
+      kong:
+        condition: service_healthy
